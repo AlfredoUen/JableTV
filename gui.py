@@ -173,9 +173,9 @@ class JableTVDownloadWindow(tk.Tk):
     def _on_window_closed(self):
         self._is_abort = True
         self._urls_list = []
-        self.on_cancel_download()
+        self.on_terminate_window()
         self.save_on_close()
-        self.destroy()
+        os._exit(0)
 
     def _get_entry_values(self):
         self.dest = self.dest_entry.get()
@@ -207,6 +207,16 @@ class JableTVDownloadWindow(tk.Tk):
             self.btn_cancel["state"] = tk.NORMAL
         else:
             self.btn_cancel["state"] = tk.DISABLED
+
+    def on_terminate_window(self):
+        self._terminateJob, self._currentJob = self._currentJob, None
+        for i in range(len(self._download_list), 0, -1):
+            delete_url = self._download_list[i-1]
+            self.tree.update_item_state(delete_url[0], "已取消")
+            self._download_list.remove(delete_url)
+        if(self._terminateJob):
+            self.tree.update_item_state(self._terminateJob.get_url_short(), "未完成")
+            threading.Thread(target=self._terminateJob.cancel_download).start()  
 
     def on_cancel_all_download(self):
         self._cancel_all = True

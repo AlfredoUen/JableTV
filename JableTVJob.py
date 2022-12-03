@@ -76,6 +76,7 @@ class JableTVJob:
             if htmlfile.status_code == 200:
                 result = re.search('og:title".+/>', htmlfile.text)
                 self._targetName = result[0].split('"')[-2]
+                self._targetName =  re.sub(r'[^\w\-_\. ]', '', self._targetName)
                 result = re.search('og:image".+jpg"', htmlfile.text)
                 self._imageUrl = result[0].split('"')[-2]
                 result = re.search("https://.+m3u8", htmlfile.text)
@@ -277,7 +278,8 @@ class JableTVJob:
         print("\n下載已取消!!!", flush=True)
 
     def begin_concurrent_download(self):
-        self._t_executor = concurrent.futures.ThreadPoolExecutor(max_workers=10)
+        max_worker = os.cpu_count()
+        self._t_executor = concurrent.futures.ThreadPoolExecutor(max_workers=max_worker)
         self._t_future = self._t_executor.submit(self.start_download)
 
     def is_concurrent_dowload_completed(self):
