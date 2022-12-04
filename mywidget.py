@@ -9,7 +9,7 @@ import csv
 from JableTVJob import JableTVJob
 import messagebox
 
-
+from tkinter import messagebox as mb
 
 class RedirectConsole(tk.Listbox):
     def __init__(self, master, *args, **kwargs):
@@ -111,8 +111,8 @@ class MyDownloadListView(ScrollTreeView):
         self.list_modified = True
 
     def _on_key_delete_event(self, event):
-        if len(self.selection()) == 0: return;
-        if messagebox.askyesno("刪除選項", f"刪除{len(self.selection())}個選取的項目嗎?") != messagebox.YES: return
+        if len(self.selection()) == 0: return
+        if not messagebox.askyesno("刪除選項", f"刪除{len(self.selection())}個選取的項目嗎?"): return
         for selected_item in self.selection():
             self.delete(selected_item)
             self.list_modified = True

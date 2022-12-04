@@ -21,6 +21,11 @@
 * 可繼續下載已取消的下載項目。
 * 單選或複選多個網址後，按Delete可以刪除。
 * 可以預覽圖片。可選擇是否開啟預覽。
+### 20221204 新增
+* 在'下載網址'裡輸入搜尋網址(如圖)，或直接複製貼上網址，再按'加入清單'，可開啟網址選取功能。
+![image](./img/search.png)
+![image](./img/select.png)
+
 
 ### requirements
 `pip install -r requirements.txt`

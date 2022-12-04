@@ -5,12 +5,12 @@ import threading
 import time
 import tkinter
 import tkinter.filedialog
+from tkinter import simpledialog as sd
 
 from mywidget import *
-from JableTVJob import JableTVJob
+from JableTVJob import JableTVJob, JableTVList
 import os
 import re
-
 from PIL import ImageTk, Image
 
 def gui_main(urls, dest):
@@ -48,8 +48,6 @@ class JableTVDownloadWindow(tk.Tk):
         self.tree.bind('<<TreeviewSelect>>', self.on_treeitem_selected)
 
         dest_frame = tk.Frame(self)
-        #        dest_frame["highlightbackground"] = "blue"
-        #        dest_frame["highlightthickness"] = 2
         dest_frame.pack(side=tk.TOP, fill='x', padx=12)
         dest_label = tk.Label(dest_frame, text='存放位置', width=10)
         dest_label.pack(side=tk.LEFT)
@@ -154,6 +152,12 @@ class JableTVDownloadWindow(tk.Tk):
         finally:
             self.clipborad_thread = None
 
+    def append_url_to_queue_for_defer_insertion(self, str):
+        self._urls_list.append(str.strip())
+        if self._urls_list != [] and not self.clipborad_thread:
+            self.clipborad_thread = threading.Timer(0.5, self._do_clipboard_list)
+            self.clipborad_thread.start()
+
     def check_clipboard(self):
         while not self._is_abort:
             try:
@@ -162,10 +166,7 @@ class JableTVDownloadWindow(tk.Tk):
                     self._clp_text = clp
                     result = re.findall("https://jable\.tv/videos/.+?/", clp)
                     for str in result:
-                        self._urls_list.append(str.strip())
-                        if self._urls_list != [] and  not self.clipborad_thread:
-                            self.clipborad_thread = threading.Timer(0.5, self._do_clipboard_list)
-                            self.clipborad_thread.start()
+                        self.append_url_to_queue_for_defer_insertion(str)
                 time.sleep(0.2)
             except:
                 pass
@@ -216,7 +217,7 @@ class JableTVDownloadWindow(tk.Tk):
             self._download_list.remove(delete_url)
         if(self._terminateJob):
             self.tree.update_item_state(self._terminateJob.get_url_short(), "未完成")
-            threading.Thread(target=self._terminateJob.cancel_download).start()  
+            threading.Thread(target=self._terminateJob.cancel_download).start()
 
     def on_cancel_all_download(self):
         self._cancel_all = True
@@ -300,6 +301,8 @@ class JableTVDownloadWindow(tk.Tk):
     def on_add_list(self):
         self.text.clear_contents()
         self._get_entry_values()
+        if self.checkVideoLists(self.urls):
+            return False
         return self._add_url_to_tree(self.urls, self.dest)
 
     def cancel_download(self):
@@ -348,17 +351,110 @@ class JableTVDownloadWindow(tk.Tk):
     def on_clear_text(self):
         self.text.clear_contents()
 
-    def movieLinks(url):
-        res = requests.get(url, headers=headers, timeout=10)
-        links = []
-        if res.status_code == 200:
-            content = res.content
-            soup = BeautifulSoup(content, 'html.parser')
-            a_tags = soup.select('div.img-box>a')
-            for a_tag in a_tags:
-                links.append(a_tag['href'])
-        print('獲取到 {0} 個影片'.format(len(links)))
-        return links
+    def checkVideoLists(self, url):
+        jlist = JableTVList(self.urls)
+        if not jlist.isVaildLinks(): return False
+        self.videoList = JableTVVideoListWindow(self, jlist)
+        return True
+
+
+class JableTVVideoListWindow(tk.Toplevel):
+    """JableTV downloader GUI Video listbox Window"""
+    def __init__(self, master, jlist, *args, **kwargs):
+        super().__init__(master, *args, **kwargs)
+        self.jList:JableTVList = jlist
+        self.mainWnd:JableTVDownloadWindow = master
+        self.grab_set()
+        self.title(f"[{jlist.getListType()}] 共有{jlist.getTotalPages()}頁，{jlist.getTotalLinks()}部影片")
+        self.geometry('720x450')
+        self.sortby = jlist.getSortType()
+        self.create_widgets(jlist)
+        self.loadPageAtIndex(jlist.getCurrentPage())
+
+    def create_widgets(self, jlist:JableTVList):
+        self.videoList = tk.Listbox(self, selectmode=tk.EXTENDED)
+        self.videoList.pack(side=tk.TOP, fill='both', expand=True, padx=4, pady=4)
+
+        frame1 = tk.Frame(self)
+        frame1.pack(side=tk.TOP, fill='x', padx=12, pady=4)
+        self.btn_first = tk.Button(frame1, text='<< 第一頁', command=self.on_first_page)
+        self.btn_first.pack(side=tk.LEFT, padx=2)
+        self.btn_prev  = tk.Button(frame1, text='< 前一頁', command=self.on_prev_page)
+        self.btn_prev.pack(side=tk.LEFT, padx=2)
+        self.txt_current = tk.Label(frame1, text='1', width=10)
+        self.txt_current.pack(side=tk.LEFT, padx=2)
+        self.btn_next  = tk.Button(frame1, text='下一頁 >', command=self.on_next_page)
+        self.btn_next.pack(side=tk.LEFT, padx=2)
+        self.btn_last  = tk.Button(frame1, text='最後頁 >>', command=self.on_last_page)
+        self.btn_last.pack(side=tk.LEFT, padx=2)
+        self.btn_any  = tk.Button(frame1, text='頁數...', command=self.on_any_page)
+        self.btn_any.pack(side=tk.LEFT, padx=2)
+
+
+        if self.sortby is not None:
+            self.cbx_sortby = ttk.Combobox(frame1, values=jlist.getSortTypeList(), width=10, state='readonly');
+            self.cbx_sortby.pack(side=tk.LEFT, padx=12)
+            self.cbx_sortby.set(self.sortby)
+            self.cbx_sortby.bind('<<ComboboxSelected>>', self.on_sortType_changed)
+
+        self.btn_sel_quit = tk.Button(frame1, text='結束選取', command=self.on_select_quit)
+        self.btn_sel_quit.pack(side=tk.RIGHT, padx=2)
+        self.btn_sel_commit = tk.Button(frame1, text='加入清單', command=self.on_select_commit)
+        self.btn_sel_commit.pack(side=tk.RIGHT, padx=12)
+
+    def loadPageAtIndex(self, index):
+        self.jList.loadPageAtIndex(index,self.sortby)
+        self.videoList.delete(0, tk.END)
+        linkDescs = self.jList.getLinkDescs()
+        for desc in linkDescs:
+            self.videoList.insert(tk.END, desc)
+        self.txt_current['text']= f"{index+1}"
+        totalPage = self.jList.getTotalPages()
+        btnState = [tk.DISABLED,tk.DISABLED,tk.DISABLED,tk.DISABLED,tk.DISABLED]
+        if totalPage != 1:
+            btnState[4] = tk.NORMAL
+            if index>0:
+                btnState[0] = btnState[1] = tk.NORMAL
+            if index < (totalPage-1):
+                btnState[2] = btnState[3] = tk.NORMAL
+        self.btn_first['state'] = btnState[0]
+        self.btn_prev['state'] = btnState[1]
+        self.btn_next['state'] = btnState[2]
+        self.btn_last['state'] = btnState[3]
+        self.btn_any['state'] = btnState[4]
+
+    def on_first_page(self):
+        self.loadPageAtIndex(0)
+
+    def on_prev_page(self):
+        nPage = self.jList.getCurrentPage() - 1
+        if nPage<0: nPage = 0
+        self.loadPageAtIndex(nPage)
+
+    def on_next_page(self):
+        nPage = self.jList.getCurrentPage() + 1
+        if nPage >= self.jList.getTotalPages(): nPage = self.jList.getTotalPages() - 1
+        self.loadPageAtIndex(nPage)
+
+    def on_last_page(self):
+        nPage = self.jList.getTotalPages() - 1
+        self.loadPageAtIndex(nPage)
+
+    def on_any_page(self):
+        nPage = sd.askinteger(" ", "請輸入頁數", minvalue=1, maxvalue=self.jList.getTotalPages()) - 1
+        self.loadPageAtIndex(nPage)
+
+    def on_select_commit(self):
+        links = self.jList.getLinks()
+        for i in self.videoList.curselection():
+            self.mainWnd.append_url_to_queue_for_defer_insertion(links[i])
+
+    def on_select_quit(self):
+        self.destroy()
+
+    def on_sortType_changed(self,event):
+        self.sortby = self.cbx_sortby.get()
+        self.loadPageAtIndex(self.jList.getCurrentPage())
 
 if __name__ == "__main__":
     gui_main("", "download")

@@ -6,10 +6,6 @@ from args import *
 from JableTVJob import *
 from gui import *
 
-''' Running as GUI mode or console mode
-    1      : GUI mode
-    others : consoles mode   
-    '''
 ''' Default folder to save the download files
     "" or None : same as the url's last stem,  ie:  "abc-001" for url = "https://jable.tv/videos/abc-001/"
     others : relative to the current folder, or an absolute path  

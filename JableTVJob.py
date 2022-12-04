@@ -11,8 +11,11 @@ from Crypto.Cipher import AES
 from config import headers
 import concurrent.futures
 import cloudscraper
+from bs4 import BeautifulSoup
 import copy
 import time
+import tkinter.commondialog as tkDlg
+
 
 """
 import threading
@@ -81,7 +84,7 @@ class JableTVJob:
                 self._imageUrl = result[0].split('"')[-2]
                 result = re.search("https://.+m3u8", htmlfile.text)
                 self._m3u8url = result[0]
-                if self.silence == False:
+                if not self.silence:
                     print("檔案名稱: " + self._targetName, flush=True)
                     print("儲存位置: " + self._dest_folder, flush=True)
                     print("檔案縮圖: " + self._imageUrl, flush=True)
@@ -104,7 +107,7 @@ class JableTVJob:
     def _get_video_savename(self): return os.path.join(self._dest_folder, self._targetName + ".mp4")
     def _get_image_savename(self): return os.path.join(self._dest_folder, self._targetName + ".jpg")
     def get_url_short(self): return self._dirName
-    def get_url_full(self):  return f"https://jable.tv/videos/{self._dirName}/"
+    def get_url_full(self): return f"https://jable.tv/videos/{self._dirName}/"
     def is_target_image_exist(self): return os.path.exists (self._get_image_savename())
     def is_target_video_exist(self): return os.path.exists (self._get_video_savename())
 
@@ -294,11 +297,109 @@ class JableTVJob:
             self._t_executor = None
 
 
-def consoles_main(urls, dest=None):
+sortby_dict = { '最高相關': '',
+                '近期最佳': 'post_date_and_popularity',
+                '最近更新': 'post_date',
+                '最多觀看': 'video_viewed',
+                '最高收藏': 'most_favourited'}
+
+class JableTVList:
+
+    def __init__(self, url, silence=False, *args, **kwargs):
+        self.islist = None;
+        if JableTVJob._validate_urls(url) is not None : return
+        self.islist = self._url_get(url)
+        if self.islist is None:
+            if not silence:
+                print(f"網址 {url} 錯誤!!", flush=True)
+            return
+        titleBox = self.islist.section.find('div', class_='title-box')
+        self.totalLinks = int(str(titleBox.span.string).partition(" ")[0])
+        self.listType = titleBox.h2.string
+        activeSortType = self.islist.find('li', class_='active')
+        if activeSortType is None: self.sortType = None
+        else:  self.sortType = str(activeSortType.a.string)
+        self.totalPages = (self.totalLinks + 23) // 24
+        self._parser_url(url)
+        if not silence:
+            print(f"[{self.listType} {str(self.sortType)}]共有{self.totalPages}頁，{self.totalLinks}部影片。已取得{len(self.links)}部影片")
+
+    def _url_get(self, url):
+        brs = {'browser': 'firefox', 'platform': platform.system().lower()}
+        try:
+            htmlfile = cloudscraper.create_scraper(browser=brs, delay=10).get(url)
+            if htmlfile.status_code == 200:
+                content = htmlfile.content
+                soup = BeautifulSoup(content, 'html.parser')
+                '''divlist = soup.find('div', id="list_videos_common_videos_list")
+                if divlist is None:
+                    divlist = soup.find('div', id="list_videos_videos_list_search_result")
+                    if divlist is None:
+                        return'''
+                divlist = soup.find('div', id="site-content")
+                if divlist is None: return None
+                divlist = divlist.div
+                self.links = []
+                self.linkDescs = []
+                tags = divlist.select('div.detail')
+                for tag in tags:
+                    tag_a = tag.h6.a
+                    self.links.append(tag_a['href'])
+                    self.linkDescs.append(str(tag_a.string))
+            return divlist
+        except Exception:
+            return None
+
+    def _parser_url(self, url):
+        if not url or url == '': return False
+        self.currentPage = 0
+        self.searchKeyWord = None
+        self.url = 'https://jable.tv'
+        uu = url.split("/")
+        if 'https://jable.tv' != '/'.join(uu[0:3]): return False
+        if len(uu)>3:
+            self.url = '/'.join(uu[:-1])+'/'
+            if 'search' == uu[3]:
+                self.searchKeyWord = uu[4]
+
+    def getLinks(self): return self.links
+    def getLinkDescs(self): return self.linkDescs
+    def getListType(self): return self.listType
+    def getTotalLinks(self): return self.totalLinks
+    def getTotalPages(self): return self.totalPages
+    def getCurrentPage(self): return self.currentPage
+    def getSortType(self): return self.sortType
+    def isVaildLinks(self): return False if self.islist is None else True
+
+    def getSortTypeList(self):
+        ll = list(sortby_dict)
+        if self.searchKeyWord is None: del ll[0]
+        return ll
+
+    def loadPageAtIndex(self, index, sortby):
+        if self.currentPage == index:
+            if self.sortType is None: return
+            if self.sortType == sortby: return
+
+        if self.sortType is None:
+            if self.searchKeyWord is None:
+                newUrl = self.url + f"?from={index+1}"
+            else:
+                newUrl = f"https://jable.tv/search/?q={self.searchKeyWord}&from_videos={index+1}"
+        else:
+            if self.searchKeyWord is None:
+                newUrl = self.url + f"?sort_by={sortby_dict[sortby]}&from={index+1}"
+            else:
+                newUrl = f"https://jable.tv/search/?q={self.searchKeyWord}&sort_by={sortby_dict[sortby]}&from_videos={index+1}"
+        self._url_get(newUrl)
+        self.currentPage = index
+        self.sortType = sortby
+
+def consoles_main(url, dest=None):
     # 使用者輸入Jable網址
-    if not urls or urls == '' :
+    if not url or url == '':
         urls = input('輸入jable網址:')
-    jjob = JableTVJob(urls, dest)
+    jjob = JableTVJob(url, dest)
     if jjob.is_url_vaildate():
         jjob.start_download()
         print('下載完成!')
