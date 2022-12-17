@@ -251,7 +251,7 @@ class JableTVJob:
                 return None
             with open(self._get_image_savename(), 'ab') as fs:
                 fs.write(response.content)
-        return  self._get_image_savename();
+        return  self._get_image_savename()
 
     def start_download(self):
         self._cancel_job = False
@@ -306,7 +306,7 @@ sortby_dict = { '最高相關': '',
 class JableTVList:
 
     def __init__(self, url, silence=False, *args, **kwargs):
-        self.islist = None;
+        self.islist = None
         if JableTVJob._validate_urls(url) is not None : return
         self.islist = self._url_get(url)
         if self.islist is None:
@@ -337,6 +337,9 @@ class JableTVList:
                     if divlist is None:
                         return'''
                 divlist = soup.find('div', id="site-content")
+                divlists_MemberOnly = soup.find_all('div', class_="ribbon-top-left")
+                _memberOnly_urls = [del_url.find_parent('a')['href'] for del_url in divlists_MemberOnly if del_url.getText() == '會員']        
+
                 if divlist is None: return None
                 divlist = divlist.div
                 self.links = []
@@ -344,8 +347,10 @@ class JableTVList:
                 tags = divlist.select('div.detail')
                 for tag in tags:
                     tag_a = tag.h6.a
-                    self.links.append(tag_a['href'])
-                    self.linkDescs.append(str(tag_a.string))
+                    _url = tag_a['href']
+                    if _url not in _memberOnly_urls:
+                        self.links.append(_url)
+                        self.linkDescs.append(str(tag_a.string))
             return divlist
         except Exception:
             return None
