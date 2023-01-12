@@ -3,7 +3,6 @@
 # coding: utf-8
 
 from args import *
-from JableTVJob import *
 from gui import *
 
 ''' Default folder to save the download files
@@ -14,18 +13,18 @@ save_folder = "download"
 
 
 if __name__ == "__main__":
-    url = ""
+    url_arg = ""
     parser = get_parser()
     args = parser.parse_args()
 
     if len(args.url) != 0:
-        url = args.url
+        url_arg = args.url
     elif args.random is True:
-        url = av_recommand()
+        url_arg = av_recommand()
 
     if args.nogui:
-        consoles_main(url, save_folder)
+        consoles_main(url_arg, save_folder)
     else:
-        gui_main(url, save_folder)
+        gui_main(url_arg, save_folder)
 
     sys.exit(0)

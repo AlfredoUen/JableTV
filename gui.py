@@ -6,22 +6,25 @@ import time
 import tkinter
 import tkinter.filedialog
 from tkinter import simpledialog as sd
-
-from mywidget import *
-from JableTVJob import JableTVJob, JableTVList
 import os
 import re
 from PIL import ImageTk, Image
 
-def gui_main(urls, dest):
-    mainWnd = JableTVDownloadWindow(dest=dest, urls=urls)
+from mywidget import *
+from JableTVJob import JableTVList
+from Site91Porn import *
+import M3U8Sites
+
+
+def gui_main(url, dest):
+    mainWnd = JableTVDownloadWindow(dest=dest, url=url)
     mainWnd.mainloop()
     mainWnd.cancel_download()
 
 
 class JableTVDownloadWindow(tk.Tk):
     """JableTV downloader GUI Main Window"""
-    def __init__(self, dest="download", urls='', *args, **kwargs):
+    def __init__(self, dest="download", url='', *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.protocol("WM_DELETE_WINDOW", self._on_window_closed)
         self._currentJob = None
@@ -29,7 +32,7 @@ class JableTVDownloadWindow(tk.Tk):
         self._cancel_all = False
         self._urls_list = []
         self._import_dest = dest
-        self.create_widgets(dest, urls)
+        self.create_widgets(dest, url)
         self._is_abort = False
         self._clp_text = ""
         self.clipborad_thread = None
@@ -38,7 +41,7 @@ class JableTVDownloadWindow(tk.Tk):
         self.clipboard_checker = threading.Thread(target=self.check_clipboard)
         self.clipboard_checker.start()
 
-    def create_widgets(self, dest, urls):
+    def create_widgets(self, dest, url):
         self.title('JableTV 下載器')
         self.geometry('1024x768')
 
@@ -81,6 +84,7 @@ class JableTVDownloadWindow(tk.Tk):
 
         self.btn_clearText = tk.Button(btn_rightframe, text="清除訊息", command=self.on_clear_text)
         self.btn_clearText.pack(side=tk.LEFT, padx=2)
+
         self.bShowThumbnail = tkinter.BooleanVar()
         self.bShowThumbnail.set(1)
         self.chkbtn_thumbnail = ttk.Checkbutton(btn_rightframe, text="顯示縮圖",variable=self.bShowThumbnail, command=self.onEnableThumbnail)
@@ -94,16 +98,16 @@ class JableTVDownloadWindow(tk.Tk):
         self.thumbnail = None
 
         self.dest = dest
-        self.urls = urls
+        self._url = url
 
         self.load_on_create()
         self.dest_entry.insert(tk.END, dest)
-        self.url_entry.insert(tk.END, urls)
+        self.url_entry.insert(tk.END, url)
 
     def _loadThumbnail(self):
         self.loadthumbnail_thread = None
         self._get_entry_values()
-        jjob = JableTVJob(self.urls, self.dest, silence=True)
+        jjob = M3U8Sites.CreateSite(self._url, self.dest, silence=True)
         url = jjob.download_image()
         if url is not None and url != "":
             img = Image.open(url)
@@ -127,7 +131,7 @@ class JableTVDownloadWindow(tk.Tk):
 
     def onEnableThumbnail(self):
         self._get_entry_values()
-        if self.urls is not None and self.urls != "":
+        if self._url is not None and self._url != "":
             self.showThumbnail()
 
     def on_treeitem_selected(self, event):
@@ -136,17 +140,17 @@ class JableTVDownloadWindow(tk.Tk):
             self.dest_entry.delete(0, tk.END)
             self.dest_entry.insert(tk.END, item['values'][2])
             self.url_entry.delete(0, tk.END)
-            url_full = JableTVJob.get_urls_form(item['values'][0], shortform=False)
+            url_full = item['values'][0]
             self.url_entry.insert(tk.END, url_full)
             self._get_entry_values()
             self.toggle_download_button()
             self.onEnableThumbnail()
 
-    def _do_clipboard_list(self):
+    def _defer_add_url_list(self):
         try:
-            while(self._urls_list != [] ):
-                urls = self._urls_list.pop(0)
-                self._add_url_to_tree(urls, self.dest)
+            while self._urls_list != []:
+                url = self._urls_list.pop(0)
+                self._add_url_to_tree(url, self.dest)
         except Exception:
             pass
         finally:
@@ -155,7 +159,7 @@ class JableTVDownloadWindow(tk.Tk):
     def append_url_to_queue_for_defer_insertion(self, str):
         self._urls_list.append(str.strip())
         if self._urls_list != [] and not self.clipborad_thread:
-            self.clipborad_thread = threading.Timer(0.5, self._do_clipboard_list)
+            self.clipborad_thread = threading.Timer(0.5, self._defer_add_url_list)
             self.clipborad_thread.start()
 
     def check_clipboard(self):
@@ -164,9 +168,12 @@ class JableTVDownloadWindow(tk.Tk):
                 clp = self.clipboard_get()
                 if not type(clp) is type(self._clp_text) or self._clp_text != clp:
                     self._clp_text = clp
-                    result = re.findall("https://jable\.tv/videos/.+?/", clp)
-                    for str in result:
-                        self.append_url_to_queue_for_defer_insertion(str)
+                    for site in M3U8Sites.siteList:
+                        if site.skip_pattern: continue
+                        result = re.findall(site.website_pattern, clp)
+                        if len(result) == 0: continue
+                        for str in result:
+                            self.append_url_to_queue_for_defer_insertion(str)
                 time.sleep(0.2)
             except:
                 pass
@@ -180,22 +187,22 @@ class JableTVDownloadWindow(tk.Tk):
 
     def _get_entry_values(self):
         self.dest = self.dest_entry.get()
-        self.urls = self.url_entry.get()
+        self._url = self.url_entry.get()
 
     def toggle_download_button(self):
         self.btn_download['text'] = "開始下載"
         self.btn_download['command'] = self.on_start_download
         self._get_entry_values()
-        if self.urls is None or self.urls == "":
+        if self._url is None or self._url == "":
             self.btn_download["state"] = tk.DISABLED
         else:
             self.btn_download["state"] = tk.NORMAL
         if self._download_list != []:
             for dlist in self._download_list:
-                if dlist[0] == self.urls:
+                if dlist[0] == self._url:
                     self.btn_download['text'] = "取消下載"
                     self.btn_download['command'] = self.on_cancel_download
-        if self._currentJob and self.urls == self._currentJob.get_url_full():
+        if self._currentJob and self._url == self._currentJob.get_url_full():
                 self.btn_download['text'] = "取消下載"
                 self.btn_download['command'] = self.on_cancel_download
 
@@ -216,7 +223,7 @@ class JableTVDownloadWindow(tk.Tk):
             self.tree.update_item_state(delete_url[0], "已取消")
             self._download_list.remove(delete_url)
         if(self._terminateJob):
-            self.tree.update_item_state(self._terminateJob.get_url_short(), "未完成")
+            self.tree.update_item_state(self._terminateJob.get_url_full(), "未完成")
             threading.Thread(target=self._terminateJob.cancel_download).start()
 
     def on_cancel_all_download(self):
@@ -224,22 +231,22 @@ class JableTVDownloadWindow(tk.Tk):
         self.on_cancel_download()
 
     def on_cancel_download(self):
-        if self._cancel_all or (self._currentJob and self.urls == self._currentJob.get_url_full()):
+        if self._cancel_all or (self._currentJob and self._url == self._currentJob.get_url_full()):
             jjob, self._currentJob = self._currentJob, None
             if(jjob):
-                self.tree.update_item_state(jjob.get_url_short(), "未完成")
+                self.tree.update_item_state(jjob.get_url_full(), "未完成")
                 threading.Thread(target=jjob.cancel_download).start()
         else:
-            for urls in self._download_list:
-                if urls[0] == self.urls:
-                    self.tree.update_item_state(self.urls, "已取消")
-                    self._download_list.remove(urls)
+            for download_item in self._download_list:
+                if download_item[0] == self._url:
+                    self.tree.update_item_state(self._url, "已取消")
+                    self._download_list.remove(download_item)
         self.toggle_download_button()
 
     def on_start_all_download(self):
         for it in self.tree.selection():
             data = self.tree.item(it)
-            url_full = JableTVJob.get_urls_form(data['values'][0], shortform=False)
+            url_full = data['values'][0]
             self._download_list.append([url_full, data['values'][2]])
             self.tree.update_item_state(url_full, "等待中")
         self.toggle_download_button()
@@ -249,8 +256,8 @@ class JableTVDownloadWindow(tk.Tk):
     def on_start_download(self):
         self._cancel_all = False
         self._get_entry_values()
-        self._download_list.append([self.urls, self.dest])
-        self.tree.update_item_state(self.urls, "等待中")
+        self._download_list.append([self._url, self.dest])
+        self.tree.update_item_state(self._url, "等待中")
         self.toggle_download_button()
         if self._currentJob is None:
             threading.Timer(0.5, self._on_timer_downloading).start()
@@ -260,7 +267,7 @@ class JableTVDownloadWindow(tk.Tk):
             if self._currentJob.is_concurrent_dowload_completed():
                 self._currentJob.end_concurrent_download()
                 jjob, self._currentJob = self._currentJob, None
-                self.tree.update_item_state(jjob.get_url_short(), "已下載")
+                self.tree.update_item_state(jjob.get_url_full(), "已下載")
                 self.toggle_download_button()
                 print('下載完成!')
                 if self._download_list != []:
@@ -269,26 +276,26 @@ class JableTVDownloadWindow(tk.Tk):
                 threading.Timer(0.5, self._on_timer_downloading).start()
         elif self._cancel_all :
             while self._download_list != []:
-                download_urls, download_dest = self._download_list.pop(0)
-                self.tree.update_item_state(download_urls, "已取消")
+                download_url, download_dest = self._download_list.pop(0)
+                self.tree.update_item_state(download_url, "已取消")
         elif self._download_list != [] :
             self.text.clear_contents()
-            download_urls, download_dest = self._download_list.pop(0)
-            self._currentJob = JableTVJob(download_urls, download_dest)
-            if self._currentJob.is_url_vaildate():
-                self.tree.update_item_state(download_urls, "下載中")
+            download_url, download_dest = self._download_list.pop(0)
+            self._currentJob = M3U8Sites.CreateSite(download_url, download_dest)
+            if self._currentJob:
+                self.tree.update_item_state(download_url, "下載中")
                 self._currentJob.begin_concurrent_download()
                 threading.Timer(0.5, self._on_timer_downloading).start()
             else:
-                if self.tree.exists(self.urls):
-                    self.tree.update_item_state(self.urls, "網址錯誤")
+                if self.tree.isUrlExist(self._url):
+                    self.tree.update_item_state(self._url, "網址錯誤")
                 self._currentJob = None
                 self.toggle_download_button()
 
     def _add_url_to_tree(self, url, savePath, showmsg=True):
-        if not self.tree.exists(url):
-            jjob = JableTVJob(url, savePath)
-            if jjob.is_url_vaildate():
+        if not self.tree.isUrlExist(url):
+            jjob = M3U8Sites.CreateSite(url, savePath)
+            if jjob:
                 self.tree.additem(url, jjob.target_name(), savePath)
                 return True
             else:
@@ -301,9 +308,9 @@ class JableTVDownloadWindow(tk.Tk):
     def on_add_list(self):
         self.text.clear_contents()
         self._get_entry_values()
-        if self.checkVideoLists(self.urls):
+        if self.checkVideoLists(self._url):
             return False
-        return self._add_url_to_tree(self.urls, self.dest)
+        return self._add_url_to_tree(self._url, self.dest)
 
     def cancel_download(self):
         jjob, self._currentJob = self._currentJob, None
@@ -321,8 +328,8 @@ class JableTVDownloadWindow(tk.Tk):
             self.text.clear_contents()
             for i in range(5):
                 while self._urls_list != []:
-                    urls = self._urls_list.pop(0)
-                    if self._add_url_to_tree(urls, self._import_dest, showmsg=False): break;
+                    url = self._urls_list.pop(0)
+                    if self._add_url_to_tree(url, self._import_dest, showmsg=False): break;
             if self._urls_list != []:
                 threading.Timer(0.05, self._do_import_list).start()
             else:
@@ -338,9 +345,12 @@ class JableTVDownloadWindow(tk.Tk):
             self._import_dest = self.dest
             with open(filename, "r", encoding='utf-8') as f:
                 for line in f.readlines():
-                    result = re.findall("https://jable\.tv/videos/.+?/", line)
-                    for str in result:
-                        self._urls_list.append(str.strip())
+                    for site in M3U8Sites.siteList:
+                        if site.skip_pattern: continue
+                        result = re.findall(site.website_pattern, line)
+                        if len(result) == 0: continue
+                        for str in result:
+                            self._urls_list.append(str.strip())
             if self._urls_list != []:
                 threading.Timer(0.5, self._do_import_list).start()
             else:
@@ -352,7 +362,7 @@ class JableTVDownloadWindow(tk.Tk):
         self.text.clear_contents()
 
     def checkVideoLists(self, url):
-        jlist = JableTVList(self.urls)
+        jlist = JableTVList(self._url)
         if not jlist.isVaildLinks(): return False
         self.videoList = JableTVVideoListWindow(self, jlist)
         return True
@@ -441,8 +451,12 @@ class JableTVVideoListWindow(tk.Toplevel):
         self.loadPageAtIndex(nPage)
 
     def on_any_page(self):
-        nPage = sd.askinteger(" ", "請輸入頁數", minvalue=1, maxvalue=self.jList.getTotalPages()) - 1
-        self.loadPageAtIndex(nPage)
+        try:
+            nPage = sd.askinteger(" ", "請輸入頁數", minvalue=1, maxvalue=self.jList.getTotalPages()) - 1
+            self.loadPageAtIndex(nPage)
+        except:
+            pass
+        self.grab_set()
 
     def on_select_commit(self):
         links = self.jList.getLinks()

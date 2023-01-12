@@ -6,7 +6,7 @@ import tkinter as tk
 import tkinter.ttk as ttk
 import os
 import csv
-from JableTVJob import JableTVJob
+import M3U8Sites
 import messagebox
 
 from tkinter import messagebox as mb
@@ -75,6 +75,7 @@ class ScrollTreeView(ttk.Treeview):
 
 class MyDownloadListView(ScrollTreeView):
     _download_state_ = {'': 100, '已下載': 0, '未完成': 1, '下載中': 2, '等待中': 3, '已取消': 4, '網址錯誤': 99}
+
     def __init__(self, master, **kwargs):
         super().__init__(master, **kwargs)
         self.list_modified = False
@@ -93,11 +94,6 @@ class MyDownloadListView(ScrollTreeView):
         self.config(displaycolumns=[2, 0, 1, 3])
         self.bind("<Delete>", self._on_key_delete_event)
         self.bind("<B1-Motion>", self._move_row, add='+')
-
-    def exists(self, item):
-        url_short = JableTVJob.get_urls_form(item)
-        if url_short: return super().exists(url_short)
-        return False
 
     def _sort_column(self, col, reverse: bool):
         l = [(self.set(k, col), k) for k in self.get_children('')]
@@ -123,28 +119,28 @@ class MyDownloadListView(ScrollTreeView):
         for s in self.selection():
             self.move(s, '', moveto)
 
-    def update_item_state(self, urls, state):
-        url_short = JableTVJob.get_urls_form(urls)
-        if url_short:
-            if not self.exists(url_short):
-                self.insert("", "end", iid=url_short, values=[url_short, "", "", state])
-            else:
-                self.set(url_short, column=self._colnames[3], value=state)
+    def update_item_state(self, url, state):
+        urlHash = hash(url)
+        if super().exists(urlHash):
+            self.set(urlHash, column=self._colnames[3], value=state)
             self.list_modified = True
 
-    def additem(self, urls, saveName="", savePath="", state=""):
-        url_short = JableTVJob.get_urls_form(urls)
-        if url_short:
-            if not self.exists(url_short):
-                self.insert("", "end", iid=url_short, values=[url_short, saveName, savePath, state])
+    def isUrlExist(self, url):
+        return super().exists(hash(url))
+
+    def additem(self, url, saveName="", savePath="", state=""):
+        if M3U8Sites.VaildateUrl(url):
+            urlHash = hash(url)
+            if not super().exists(urlHash):
+                self.insert("", "end", iid=urlHash, values=[url, saveName, savePath, state])
                 self.list_modified = True
             else:
-                v_old = self.set(url_short)
+                v_old = self.set(urlHash)
                 if savePath != v_old[2]:
-                    self.set(url_short, column=self._colnames[2], value=savePath)
+                    self.set(urlHash, column=self._colnames[2], value=savePath)
                     self.list_modified = True
-                if saveName != '' and  saveName != v_old[1]:
-                    self.set(url_short, column=self._colnames[1], value=saveName)
+                if saveName != '' and saveName != v_old[1]:
+                    self.set(urlHash, column=self._colnames[1], value=saveName)
                     self.list_modified = True
 
     def save_to_csv(self, csvName):
@@ -155,7 +151,6 @@ class MyDownloadListView(ScrollTreeView):
             items = self.get_children()
             for it in items:
                 data = self.set(it)
-                data[self._colnames[0]] = JableTVJob.get_urls_form(data[self._colnames[0]],shortform=False)
                 csvwriter.writerow(data)
         self.list_modified = False
 
