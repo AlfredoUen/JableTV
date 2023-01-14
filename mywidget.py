@@ -7,9 +7,7 @@ import tkinter.ttk as ttk
 import os
 import csv
 import M3U8Sites
-import messagebox
-
-from tkinter import messagebox as mb
+from tkinter import messagebox
 
 class RedirectConsole(tk.Listbox):
     def __init__(self, master, *args, **kwargs):
@@ -22,21 +20,17 @@ class RedirectConsole(tk.Listbox):
         sys.stdout.write = self._old_stdout_write
 
     def _on_stdout_write(self, msg):
+        self.configure(state="normal")
         try:
-            self.configure(state="normal")
             msgs1 = msg.partition("\n")
             while True:
                 msgs2 = msgs1[0].rpartition("\r")
                 if msgs2[1] == '\r':
                     newline = msgs2[2]
-                    #newline = newline.lstrip()
                 else:
                     newline = self.get(self._cursor_y) + msgs2[2]
                 if newline != "":
-                    #self["state"] = tk.DISABLED
-                    #self.delete(self._cursor_y, tk.END)
                     self.delete(self._cursor_y)
-                    #self["state"] = tk.NORMAL
                     self.insert(self._cursor_y, newline)
                     self.see(self._cursor_y)
                 if msgs1[1] != "\n": break
@@ -44,10 +38,10 @@ class RedirectConsole(tk.Listbox):
                 self.see(self._cursor_y)
                 if msgs1[2] == "": break
                 msgs1 = msgs1[2].partition("\n")
-            self.configure(state="disabled")
         except Exception:
             # 輸出到原來的 stdout IO
             self._old_stdout_write(msg)
+        self.configure(state="disabled")
 
     def clear_contents(self):
         self.configure(state="normal")

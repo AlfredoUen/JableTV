@@ -1,4 +1,4 @@
-# author: hcjohn463 ** Modify by Alfredo 26/Dec/2021
+# author: Alfredo 26/Dec/2021
 #!/usr/bin/env python
 # coding: utf-8
 
@@ -23,7 +23,7 @@ if __name__ == "__main__":
         url_arg = av_recommand()
 
     if args.nogui:
-        consoles_main(url_arg, save_folder)
+        M3U8Sites.consoles_main(url_arg, save_folder)
     else:
         gui_main(url_arg, save_folder)
 

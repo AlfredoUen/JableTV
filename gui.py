@@ -5,14 +5,11 @@ import threading
 import time
 import tkinter
 import tkinter.filedialog
-from tkinter import simpledialog as sd
-import os
+from tkinter import simpledialog
 import re
 from PIL import ImageTk, Image
 
 from mywidget import *
-from JableTVJob import JableTVList
-from Site91Porn import *
 import M3U8Sites
 
 
@@ -308,9 +305,10 @@ class JableTVDownloadWindow(tk.Tk):
     def on_add_list(self):
         self.text.clear_contents()
         self._get_entry_values()
-        if self.checkVideoLists(self._url):
-            return False
-        return self._add_url_to_tree(self._url, self.dest)
+        if M3U8Sites.VaildateUrl(self._url):
+            self._add_url_to_tree(self._url, self.dest)
+        else:
+            self.checkVideoLists(self._url)
 
     def cancel_download(self):
         jjob, self._currentJob = self._currentJob, None
@@ -329,7 +327,8 @@ class JableTVDownloadWindow(tk.Tk):
             for i in range(5):
                 while self._urls_list != []:
                     url = self._urls_list.pop(0)
-                    if self._add_url_to_tree(url, self._import_dest, showmsg=False): break;
+                    if self._add_url_to_tree(url, self._import_dest, showmsg=False):
+                        break
             if self._urls_list != []:
                 threading.Timer(0.05, self._do_import_list).start()
             else:
@@ -362,17 +361,16 @@ class JableTVDownloadWindow(tk.Tk):
         self.text.clear_contents()
 
     def checkVideoLists(self, url):
-        jlist = JableTVList(self._url)
-        if not jlist.isVaildLinks(): return False
-        self.videoList = JableTVVideoListWindow(self, jlist)
-        return True
+        jlist =  M3U8Sites.siteUrlList(self._url)
+        if jlist:
+            self.videoList = JableTVVideoListWindow(self, jlist)
 
 
 class JableTVVideoListWindow(tk.Toplevel):
     """JableTV downloader GUI Video listbox Window"""
     def __init__(self, master, jlist, *args, **kwargs):
         super().__init__(master, *args, **kwargs)
-        self.jList:JableTVList = jlist
+        self.jList = jlist
         self.mainWnd:JableTVDownloadWindow = master
         self.grab_set()
         self.title(f"[{jlist.getListType()}] 共有{jlist.getTotalPages()}頁，{jlist.getTotalLinks()}部影片")
@@ -381,7 +379,7 @@ class JableTVVideoListWindow(tk.Toplevel):
         self.create_widgets(jlist)
         self.loadPageAtIndex(jlist.getCurrentPage())
 
-    def create_widgets(self, jlist:JableTVList):
+    def create_widgets(self, jlist):
         self.videoList = tk.Listbox(self, selectmode=tk.EXTENDED)
         self.videoList.pack(side=tk.TOP, fill='both', expand=True, padx=4, pady=4)
 
@@ -389,20 +387,19 @@ class JableTVVideoListWindow(tk.Toplevel):
         frame1.pack(side=tk.TOP, fill='x', padx=12, pady=4)
         self.btn_first = tk.Button(frame1, text='<< 第一頁', command=self.on_first_page)
         self.btn_first.pack(side=tk.LEFT, padx=2)
-        self.btn_prev  = tk.Button(frame1, text='< 前一頁', command=self.on_prev_page)
+        self.btn_prev = tk.Button(frame1, text='< 前一頁', command=self.on_prev_page)
         self.btn_prev.pack(side=tk.LEFT, padx=2)
         self.txt_current = tk.Label(frame1, text='1', width=10)
         self.txt_current.pack(side=tk.LEFT, padx=2)
-        self.btn_next  = tk.Button(frame1, text='下一頁 >', command=self.on_next_page)
+        self.btn_next = tk.Button(frame1, text='後一頁 >', command=self.on_next_page)
         self.btn_next.pack(side=tk.LEFT, padx=2)
-        self.btn_last  = tk.Button(frame1, text='最後頁 >>', command=self.on_last_page)
+        self.btn_last = tk.Button(frame1, text='最後頁 >>', command=self.on_last_page)
         self.btn_last.pack(side=tk.LEFT, padx=2)
-        self.btn_any  = tk.Button(frame1, text='頁數...', command=self.on_any_page)
+        self.btn_any = tk.Button(frame1, text='頁數...', command=self.on_any_page)
         self.btn_any.pack(side=tk.LEFT, padx=2)
 
-
         if self.sortby is not None:
-            self.cbx_sortby = ttk.Combobox(frame1, values=jlist.getSortTypeList(), width=10, state='readonly');
+            self.cbx_sortby = ttk.Combobox(frame1, values=jlist.getSortTypeList(), width=10, state='readonly')
             self.cbx_sortby.pack(side=tk.LEFT, padx=12)
             self.cbx_sortby.set(self.sortby)
             self.cbx_sortby.bind('<<ComboboxSelected>>', self.on_sortType_changed)
@@ -452,7 +449,7 @@ class JableTVVideoListWindow(tk.Toplevel):
 
     def on_any_page(self):
         try:
-            nPage = sd.askinteger(" ", "請輸入頁數", minvalue=1, maxvalue=self.jList.getTotalPages()) - 1
+            nPage = simpledialog.askinteger(" ", "請輸入頁數", minvalue=1, maxvalue=self.jList.getTotalPages()) - 1
             self.loadPageAtIndex(nPage)
         except:
             pass
@@ -469,6 +466,7 @@ class JableTVVideoListWindow(tk.Toplevel):
     def on_sortType_changed(self,event):
         self.sortby = self.cbx_sortby.get()
         self.loadPageAtIndex(self.jList.getCurrentPage())
+
 
 if __name__ == "__main__":
     gui_main("", "download")

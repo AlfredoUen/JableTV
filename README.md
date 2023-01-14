@@ -26,6 +26,17 @@
 ![image](./img/search.png)
 ![image](./img/select.png)
 
+### 20230114 新增
+* 新增支援多個網站 
+* 目前支援網站 (持續更新中)
+  * https://www.jable.tv
+  * https://www.jable.org
+  * https://www.thisav.org
+  * https://www.pigav.org
+  * https://www.porn5f.org
+  * https://www.85tube.org
+  * https://www.91porn.best
+
 
 ### requirements
 `pip install -r requirements.txt`
