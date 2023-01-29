@@ -8,35 +8,38 @@ from bs4 import BeautifulSoup
 
 
 class SiteJableTV(M3U8Crawler):
-
     website_pattern = r'https://jable\.tv/videos/.+/'
     website_dirname_pattern = r'https://jable\.tv/videos/(.+)/$'
-    #   https://jable.tv/videos/abw-312/
 
     def get_url_infos(self):
-        url = self.get_url_full()
-        htmlfile = cloudscraper.create_scraper(browser=request_headers, delay=10).get(url)
-        if htmlfile.status_code == 200:
-            result = re.search('og:title".+/>', htmlfile.text)
-            self._targetName = result[0].split('"')[-2]
-            self._targetName = re.sub(r'[^\w\-_\. ]', '', self._targetName)
-            result = re.search('og:image".+jpg"', htmlfile.text)
-            self._imageUrl = result[0].split('"')[-2]
-            result = re.search("https://.+m3u8", htmlfile.text)
-            self._m3u8url = result[0]
-        else:
-            raise Exception(f"Bad url names: {url}")
+        htmlfile = cloudscraper.create_scraper(browser=request_headers, delay=10).get(self._url)
+        if htmlfile.status_code != 200:
+            raise Exception(f"Bad url names: {self._url}")
+        result = re.search('og:title".+/>', htmlfile.text)
+        self._targetName = result[0].split('"')[-2]
+        result = re.search('og:image".+jpg"', htmlfile.text)
+        self._imageUrl = result[0].split('"')[-2]
+        result = re.search("https://.+m3u8", htmlfile.text)
+        self._m3u8url = result[0]
+
+
+class SiteJableTV_Backup(SiteJableTV):
+    website_pattern = r'https://fs1\.app/videos/.+/'
+    website_dirname_pattern = r'https://fs1\.app/videos/(.+)/$'
 
 
 class JableTVList(SiteUrlList_M3U8):
-
     _sortby_dict = {'最高相關': '',
                    '近期最佳': 'post_date_and_popularity',
                    '最近更新': 'post_date',
                    '最多觀看': 'video_viewed',
                    '最高收藏': 'most_favourited'}
 
+    _url_root = 'https://jable.tv'
+
     def __init__(self, url, silence=False):
+        self.islist = None
+        if not url.startswith(self._url_root): return
         self.islist = self._url_get(url)
         if self.islist is None:
             if not silence:
@@ -52,9 +55,8 @@ class JableTVList(SiteUrlList_M3U8):
         self.totalPages = (self.totalLinks + 23) // 24
         self.currentPage = 0
         self.searchKeyWord = None
-        self.url = 'https://jable.tv'
         uu = url.split("/")
-        if 'https://jable.tv' == '/'.join(uu[0:3]):
+        if self._url_root == '/'.join(uu[0:3]):
             if len(uu)>3:
                 self.url = '/'.join(uu[:-1])+'/'
                 if 'search' == uu[3]:
@@ -63,6 +65,7 @@ class JableTVList(SiteUrlList_M3U8):
             print(f"[{self.listType} {str(self.sortType)}]共有{self.totalPages}頁，{self.totalLinks}部影片。已取得{len(self.links)}部影片")
 
     def _url_get(self, url):
+        divlist = None
         try:
             htmlfile = cloudscraper.create_scraper(browser=request_headers, delay=10).get(url)
             if htmlfile.status_code == 200:
@@ -83,8 +86,9 @@ class JableTVList(SiteUrlList_M3U8):
                         self.links.append(_url)
                         self.linkDescriptions.append(str(tag_a.string))
             return divlist
+
         except Exception:
-            return None
+            return divlist
 
     def getSortTypeList(self):
         ll = list(JableTVList._sortby_dict)
@@ -100,13 +104,12 @@ class JableTVList(SiteUrlList_M3U8):
             if self.searchKeyWord is None:
                 newUrl = self.url + f"?from={index+1}"
             else:
-                newUrl = f"https://jable.tv/search/?q={self.searchKeyWord}&from_videos={index+1}"
+                newUrl = f"{self._url_root}/search/?q={self.searchKeyWord}&from_videos={index+1}"
         else:
             if self.searchKeyWord is None:
                 newUrl = self.url + f"?sort_by={JableTVList._sortby_dict[sortby]}&from={index+1}"
             else:
-                newUrl = f"https://jable.tv/search/?q={self.searchKeyWord}&sort_by={JableTVList._sortby_dict[sortby]}&from_videos={index+1}"
+                newUrl = f"{self._url_root}/search/?q={self.searchKeyWord}&sort_by={JableTVList._sortby_dict[sortby]}&from_videos={index+1}"
         self._url_get(newUrl)
         self.currentPage = index
         self.sortType = sortby
-

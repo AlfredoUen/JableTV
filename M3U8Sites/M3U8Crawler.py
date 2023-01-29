@@ -21,7 +21,8 @@ def print(*a, **b):
     with threading.Lock():
         print_old(*a, **b)
 """
-request_headers =  {'browser': 'firefox', 'platform': platform.system().lower()}
+request_headers = {'browser': 'firefox', 'platform': platform.system().lower()}
+default_max_workers = os.cpu_count() if os.cpu_count()>8 else 8
 
 class M3U8Crawler:
     """ A base class all m3u8 crawl website tool """
@@ -49,7 +50,7 @@ class M3U8Crawler:
         self._targetName = None
         self._imageUrl = None
         self._m3u8url = None
-        self._max_workers = 8
+        self._max_workers = default_max_workers
         try:
             self._dirName = self.validate_url(url)
             if not self._dirName: return
@@ -59,18 +60,21 @@ class M3U8Crawler:
                 self._dest_folder = self._temp_folder
             else:
                 self._dest_folder = os.path.join(os.getcwd(), savepath)
+
             self.get_url_infos()
             if self.is_url_vaildate():
+                if self._targetName:
+                    self._targetName = re.sub(r'[^\w\-_\. ]', '', self._targetName)
                 if not self.silence:
-                    print("檔案名稱: " + self._targetName, flush=True)
-                    print("儲存位置: " + self._dest_folder, flush=True)
-                    print("檔案縮圖: " + self._imageUrl, flush=True)
+                    if self._targetName: print("檔案名稱: " + self._targetName, flush=True)
+                    if self._dest_folder: print("儲存位置: " + self._dest_folder, flush=True)
+                    if self._imageUrl: print("檔案縮圖: " + self._imageUrl, flush=True)
 
         except Exception:
             self._targetName = self._imageUrl = self._m3u8url = None
             print(f"下載網址 {url} 錯誤!!", flush=True)
 
-    def get_url_infos(self): pass
+    def get_url_infos(self): raise Exception(f"Must implement get_url_info()")
     def target_name(self): return self._targetName
     def dest_folder(self): return self._dest_folder
     def is_url_vaildate(self): return True if self._m3u8url else False
@@ -82,48 +86,74 @@ class M3U8Crawler:
         if not os.path.exists(self._dest_folder):  os.makedirs(self._dest_folder)
 
     def _get_video_savename(self): return os.path.join(self._dest_folder, self._targetName + ".mp4")
-    def _get_image_savename(self): return os.path.join(self._dest_folder, self._targetName + ".jpg")
+
+    def _get_image_savename(self):
+        if self._imageUrl is None: return None
+        return os.path.join(self._dest_folder, self._targetName + ".jpg")
+
     def get_url_full(self): return self._url
 
-    def is_target_image_exist(self): return os.path.exists (self._get_image_savename())
     def is_target_video_exist(self): return os.path.exists (self._get_video_savename())
+
+    def is_target_image_exist(self):
+        if self._imageUrl is None: return True;
+        return os.path.exists (self._get_image_savename())
+
+    def _getm3u8PlayList(self, uri):
+        m3u8urlPath = self._m3u8url.split('/')
+        if uri.startswith('/'): m3u8urlPath = m3u8urlPath[:3]
+        else:  m3u8urlPath.pop(-1)
+        downloadurl = ('/').join(m3u8urlPath)
+        playListUrl = downloadurl + uri
+        m3u8obj = m3u8.load(playListUrl)
+        return m3u8obj, downloadurl
 
     def _create_m3u8(self):
         # 得到 m3u8 網址
         m3u8urlList = self._m3u8url.split('/')
         m3u8urlList.pop(-1)
-        downloadurl = '/'.join(m3u8urlList)
+        downloadurl = '/'.join(m3u8urlList) + '/'
         # 儲存 m3u8 file 至資料夾
-        m3u8file = os.path.join(self._temp_folder, self._dirName + '.m3u8')
-        urllib.request.urlretrieve(self._m3u8url, m3u8file)
+        #m3u8file = os.path.join(self._temp_folder, self._dirName + '.m3u8')
+        #urllib.request.urlretrieve(self._m3u8url, m3u8file)
         # 得到 m3u8 file裡的 URI和 IV
-        m3u8obj = m3u8.load(m3u8file)
+        #m3u8obj = m3u8.load(m3u8file)
+        m3u8obj = m3u8.load(self._m3u8url)
+        if len(m3u8obj.playlists) > 0:
+            m3u8obj, downloadurl = self._getm3u8PlayList(m3u8obj.playlists[0].uri)
+
         m3u8uri = ''
         m3u8iv = ''
         for key in m3u8obj.keys:
-            if key:
+            if key and key.uri:
                 m3u8uri = key.uri
                 m3u8iv = key.iv
         # 儲存 ts網址 in self._tsList
         self._tsList = []
         for seg in m3u8obj.segments:
-            tsUrl = downloadurl + '/' + seg.uri
+            if not seg.uri.startswith('https://'):
+                tsUrl = downloadurl + seg.uri
+            #else: tsUrl = seg.uri
             self._tsList.append(tsUrl)
         # 有加密
         if m3u8uri:
-            m3u8keyurl = downloadurl + '/' + m3u8uri  # 得到 key 的網址
+            m3u8keyurl = downloadurl + m3u8uri  # 得到 key 的網址
             # 得到 key的內容
             response = requests.get(m3u8keyurl, headers=headers, timeout=10)
             contentKey = response.content
-            vt = m3u8iv.replace("0x", "")[:16].encode()  # IV取前16位
-            self._ci = AES.new(contentKey, AES.MODE_CBC, vt)  # 建構解碼器
+            if m3u8iv:
+                vt = m3u8iv.replace("0x", "")[:16].encode()  # IV取前16位
+                self._ci = AES.new(contentKey, AES.MODE_CBC, vt)  # 建構解碼器
+            else:
+                self._ci = AES.new(contentKey, AES.MODE_CBC)  # 建構解碼器
+
         else:
             self._ci = ''
-        # 刪除m3u8 file
+        """# 刪除m3u8 file
         files = os.listdir(self._temp_folder)
         for file in files:
             if file.endswith('.m3u8'):
-                os.remove(os.path.join(self._temp_folder, file))
+                os.remove(os.path.join(self._temp_folder, file))"""
 
     def _deleteMp4Chunks(self):
         for url in self._tsList:
@@ -196,6 +226,9 @@ class M3U8Crawler:
         # 同時建立及啟用 8 個執行緒
         while self._downloadList != [] and not self._cancel_job:
             round += 1
+            if round > 8:
+                print(f'多次重試錯誤，取消下載')
+                break;
             with concurrent.futures.ThreadPoolExecutor(max_workers=self._max_workers) as executor:
                 self._t2_executor = executor
                 executor.map(self._scrape, self._downloadList)
@@ -223,11 +256,14 @@ class M3U8Crawler:
         if not self.is_target_image_exist():
             self._create_dest_folder()
             # 下載預覽圖
-            response = requests.get(self._imageUrl, headers=headers, timeout=10)
-            if response.status_code != requests.codes.ok:
+            try:
+                response = requests.get(self._imageUrl, headers=headers, timeout=10)
+                if response.status_code != requests.codes.ok:
+                    return None
+                with open(self._get_image_savename(), 'ab') as fs:
+                    fs.write(response.content)
+            except:
                 return None
-            with open(self._get_image_savename(), 'ab') as fs:
-                fs.write(response.content)
         return  self._get_image_savename()
 
     def start_download(self):
@@ -258,8 +294,7 @@ class M3U8Crawler:
         print("\n下載已取消!!!", flush=True)
 
     def begin_concurrent_download(self):
-        max_worker = os.cpu_count()
-        self._t_executor = concurrent.futures.ThreadPoolExecutor(max_workers=max_worker)
+        self._t_executor = concurrent.futures.ThreadPoolExecutor(max_workers=self._max_workers)
         self._t_future = self._t_executor.submit(self.start_download)
 
     def is_concurrent_dowload_completed(self):

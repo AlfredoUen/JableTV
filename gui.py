@@ -361,8 +361,8 @@ class JableTVDownloadWindow(tk.Tk):
         self.text.clear_contents()
 
     def checkVideoLists(self, url):
-        jlist =  M3U8Sites.siteUrlList(self._url)
-        if jlist:
+        jlist = M3U8Sites.siteUrlList(self._url)
+        if jlist.isVaildLinks():
             self.videoList = JableTVVideoListWindow(self, jlist)
 
 

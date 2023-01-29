@@ -37,6 +37,23 @@
   * https://www.85tube.org
   * https://www.91porn.best
 
+### 20230129 新增
+* 修正一些問題。
+* 新增支援網站 
+  * https://www.pornbest.org/
+  * https://www.javdb.live/
+  * https://www.hanime.xyz/
+  * https://www.porntw.com/
+  * https://www.pornjp.org/
+  * https://www.pornhk.org/
+  * https://www.pornhoho.com/
+  * https://www.pornnvr.me/
+  * https://www.video01.org/
+  * https://www.pornlulu.com/
+  * https://www.mien321.cc/
+  * https://www.aapp11.life/
+  * https://www.seselah.com/
+  * https://forum.xjishi.site/
 
 ### requirements
 `pip install -r requirements.txt`
